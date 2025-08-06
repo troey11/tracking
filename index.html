@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Monitoring Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            grid-template-rows: auto 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        .top-bar {
+            grid-column: 1 / -1;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e9ecef;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .top-bar h1 {
+            font-size: 1.8em;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .status-indicator.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-indicator.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.online {
+            background: #28a745;
+        }
+
+        .status-dot.offline {
+            background: #dc3545;
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid #e9ecef;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .sidebar-header h2 {
+            margin-bottom: 5px;
+            font-size: 1.3em;
+        }
+
+        .sidebar-header p {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+
+        .controls-section {
+            padding: 20px;
+            border-bottom: 1px solid #f1f2f6;
+        }
+
+        .controls-section h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .control-group input, .control-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 0.9em;
+            transition: border-color 0.3s ease;
+        }
+
+        .control-group input:focus, .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .server-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9em;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .devices-list {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .devices-list h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .device-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .device-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
+        .device-item.selected {
+            border-left-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
+        }
+
+        .device-item.offline {
+            opacity: 0.6;
+            border-left-color: #95a5a6;
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .device-name {
+            font-weight: 700;
+            color: #2c3e50;
+            font-size: 1em;
+        }
+
+        .device-status {
+            font-size: 0.8em;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .device-status.online {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .device-status.offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .device-info {
+            font-size: 0.85em;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .device-location {
+            font-family: 'Courier New', monospace;
+            background: #f8f9fa;
+            padding: 5px 8px;
+            border-radius: 6px;
+            margin-top: 5px;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+
+        .map-controls {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .map-controls h2 {
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .map-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            min-height: 500px;
+        }
+
+        #monitoringMap {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .stats-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            min-width: 200px;
+            z-index: 1000;
+        }
+
+        .stats-overlay h3 {
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-size: 1em;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .alert-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            display: none;
+            z-index: 1000;
+        }
+
+        .alert-panel.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .alert-header h3 {
+            color: #e74c3c;
+            margin: 0;
+        }
+
+        .alert-close {
+            background: none;
+            border: none;
+            font-size: 1.2em;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .alert-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f2f6;
+            font-size: 0.9em;
+        }
+
+        .alert-item:last-child {
+            border-bottom: none;
+        }
+
+        .alert-time {
+            color: #666;
+            font-size: 0.8em;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .floating-controls {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .floating-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-size: 1.2em;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+
+        .floating-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .connection-logs {
+            position: absolute;
+            bottom: 20px;
+            left: 350px;
+            width: 300px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            z-index: 1000;
+        }
+
+        .connection-logs.show {
+            display: block;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-timestamp {
+            color: #888;
+        }
+
+        .log-info { color: #17a2b8; }
+        .log-success { color: #28a745; }
+        .log-warning { color: #ffc107; }
+        .log-error { color: #dc3545; }
+
+        @media (max-width: 1024px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto 1fr;
+            }
+            
+            .sidebar {
+                max-height: 300px;
+                order: 2;
+            }
+            
+            .main-content {
+                order: 3;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="top-bar">
+            <h1>🌍 Location Monitoring Dashboard</h1>
+            <div class="server-status">
+                <div id="serverStatus" class="status-indicator offline">
+                    <div class="status-dot offline"></div>
+                    <span>Server Offline</span>
+                </div>
+                <div class="server-controls">
+                    <button id="startServerBtn" class="btn btn-primary">Start Server</button>
+                    <button id="stopServerBtn" class="btn btn-danger" style="display: none;">Stop Server</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 Control Panel</h2>
+                <p>Manage devices and monitoring settings</p>
+            </div>
+
+            <div class="controls-section">
+                <h3>🔧 Server Settings</h3>
+                <div class="control-group">
+                    <label for="serverPort">WebSocket Port</label>
+                    <input type="number" id="serverPort" value="8080" min="1000" max="65535">
+                </div>
+                <div class="control-group">
+                    <label for="updateInterval">Update Interval (ms)</label>
+                    <input type="number" id="updateInterval" value="5000" min="1000" max="60000" step="1000">
+                </div>
+                <div class="control-group">
+                    <label for="mapType">Map Type</label>
+                    <select id="mapType">
+                        <option value="osm">OpenStreetMap</option>
+                        <option value="satellite">Satellite</option>
+                        <option value="terrain">Terrain</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="devices-list">
+                <h3>📱 Connected Devices (<span id="deviceCount">0</span>)</h3>
+                <div id="devicesList">
+                    <p style="text-align: center; color: #666; font-style: italic; margin-top: 20px;">
+                        No devices connected
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="map-controls">
+                <h2>🗺️ Real-time Tracking Map</h2>
+                <div class="map-actions">
+                    <button class="btn btn-primary" onclick="centerAllDevices()">📍 Center All</button>
+                    <button class="btn btn-primary" onclick="togglePaths()">📊 Toggle Paths</button>
+                    <button class="btn btn-primary" onclick="exportData()">📥 Export Data</button>
+                    <button class="btn btn-primary" onclick="toggleLogs()">📜 View Logs</button>
+                </div>
+            </div>
+
+            <div class="map-container">
+                <div id="monitoringMap"></div>
+                
+                <div class="stats-overlay">
+                    <h3>📊 Live Statistics</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Active Devices:</span>
+                        <span class="stat-value" id="activeDevices">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total Updates:</span>
+                        <span class="stat-value" id="totalUpdates">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Last Update:</span>
+                        <span class="stat-value" id="lastUpdate">-</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Uptime:</span>
+                        <span class="stat-value" id="uptime">00:00:00</span>
+                    </div>
+                </div>
+
+                <div class="floating-controls">
+                    <button class="floating-btn" title="Refresh Map" onclick="refreshMap()">🔄</button>
+                    <button class="floating-btn" title="Toggle Fullscreen" onclick="toggleFullscreen()">⛶</button>
+                    <button class="floating-btn" title="Download Screenshot" onclick="downloadMapScreenshot()">📷</button>
+                </div>
+
+                <div id="alertPanel" class="alert-panel">
+                    <div class="alert-header">
+                        <h3>⚠️ System Alerts</h3>
+                        <button class="alert-close" onclick="closeAlerts()">×</button>
+                    </div>
+                    <div id="alertList" class="alert-list">
+                        <!-- Alerts will be populated here -->
+                    </div>
+                </div>
+
+                <div id="connectionLogs" class="connection-logs">
+                    <div style="border-bottom: 1px solid #444; margin-bottom: 10px; padding-bottom: 5px;">
+                        <strong>📜 Connection Logs</strong>
+                    </div>
+                    <div id="logEntries">
+                        <!-- Log entries will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        class LocationMonitoringDashboard {
+            constructor() {
+                this.websocketServer = null;
+                this.connectedDevices = {};
+                this.deviceMarkers = {};
+                this.devicePaths = {};
+                this.map = null;
+                this.isServerRunning = false;
+                this.totalUpdates = 0;
+                this.startTime = null;
+                this.showPaths = true;
+                this.selectedDevice = null;
+                this.alerts = [];
+                this.logs = [];
+
+                this.init();
+            }
+
+            init() {
+                this.initMap();
+                this.setupEventListeners();
+                this.startStatsUpdate();
+                this.loadSettings();
+            }
+
+            initMap() {
+                this.map = L.map('monitoringMap').setView([-6.2088, 106.8456], 10); // Jakarta center
+
+                // Default tile layer
+                this.updateMapLayer();
+
+                // Add scale control
+                L.control.scale().addTo(this.map);
+
+                // Add custom controls
+                const customControl = L.Control.extend({
+                    onAdd: (map) => {
+                        const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
+                        container.style.backgroundColor = 'white';
+                        container.style.padding = '5px';
+                        container.innerHTML = '🏠';
+                        container.style.cursor = 'pointer';
+                        container.onclick = () => {
+                            this.map.setView([-6.2088, 106.8456], 10);
+                        };
+                        return container;
+                    }
+                });
+                this.map.addControl(new customControl({position: 'topleft'}));
+            }
+
+            updateMapLayer() {
+                const mapType = document.getElementById('mapType').value;
+                
+                if (this.currentLayer) {
+                    this.map.removeLayer(this.currentLayer);
+                }
+
+                switch (mapType) {
+                    case 'satellite':
+                        this.currentLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                            attribution: '&copy; Esri'
+                        });
+                        break;
+                    case 'terrain':
+                        this.currentLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; OpenTopoMap contributors'
+                        });
+                        break;
+                    default: // osm
+                        this.currentLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            attribution: '&copy; OpenStreetMap contributors'
+                        });
+                }
+
+                this.currentLayer.addTo(this.map);
+            }
+
+            setupEventListeners() {
+                // Server control buttons
+                document.getElementById('startServerBtn').addEventListener('click', () => {
+                    this.startWebSocketServer();
+                });
+
+                document.getElementById('stopServerBtn').addEventListener('click', () => {
+                    this.stopWebSocketServer();
+                });
+
+                // Map type change
+                document.getElementById('mapType').addEventListener('change', () => {
+                    this.updateMapLayer();
+                    this.saveSettings();
+                });
+
+                // Settings changes
+                document.getElementById('serverPort').addEventListener('change', () => {
+                    this.saveSettings();
+                });
+
+                document.getElementById('updateInterval').addEventListener('change', () => {
+                    this.saveSettings();
+                });
+            }
+
+            startWebSocketServer() {
+                const port = document.getElementById('serverPort').value;
+                
+                try {
+                    // Simulate WebSocket server (in real implementation, this would be a Node.js server)
+                    this.simulateWebSocketServer(port);
+                    this.isServerRunning = true;
+                    this.startTime = new Date();
+                    
+                    this.updateServerStatus(true);
+                    this.addLog('Server started successfully on port ' + port, 'success');
+                    this.showAlert('WebSocket server started on port ' + port, 'success');
+                    
+                } catch (error) {
+                    console.error('Failed to start server:', error);
+                    this.addLog('Failed to start server: ' + error.message, 'error');
+                    this.showAlert('Failed to start server', 'error');
+                }
+            }
+
+            stopWebSocketServer() {
+                if (this.websocketServer) {
+                    // In real implementation, close the WebSocket server
+                    this.websocketServer = null;
+                }
+
+                this.isServerRunning = false;
+                this.startTime = null;
+                
+                // Clear all connected devices
+                Object.keys(this.connectedDevices).forEach(deviceId => {
+                    this.removeDevice(deviceId);
+                });
+
+                this.updateServerStatus(false);
+                this.addLog('Server stopped', 'warning');
+                this.showAlert('WebSocket server stopped', 'warning');
+            }
+
+            simulateWebSocketServer(port) {
+                // This simulates a WebSocket server for demonstration
+                // In real implementation, you would use Node.js with ws library
+                
+                this.addLog(`Starting WebSocket server on port ${port}...`, 'info');
+                
+                // Simulate some demo devices connecting
+                setTimeout(() => {
+                    this.simulateDeviceConnection('Android-001', 'Samsung Galaxy S21', -6.2088, 106.8456);
+                }, 2000);
+                
+                setTimeout(() => {
+                    this.simulateDeviceConnection('Android-002', 'Xiaomi Mi 11', -6.1751, 106.8650);
+                }, 4000);
+                
+                setTimeout(() => {
+                    this.simulateDeviceConnection('Android-003', 'OnePlus 9', -6.2297, 106.8175);
+                }, 6000);
+
+                // Start simulated location updates
+                this.startLocationSimulation();
+            }
+
+            simulateDeviceConnection(deviceId, deviceName, lat, lng) {
+                const deviceInfo = {
+                    deviceId: deviceId,
+                    deviceName: deviceName,
+                    userAgent: 'Mozilla/5.0 (Linux; Android 11; SM-G991B)',
+                    connected: true,
+                    lastSeen: new Date().toISOString(),
+                    location: {
+                        latitude: lat,
+                        longitude: lng,
+                        accuracy: 10 + Math.random() * 20,
+                        timestamp: new Date().toISOString()
+                    }
+                };
+
+                this.addDevice(deviceInfo);
+                this.addLog(`Device connected: ${deviceName} (${deviceId})`, 'success');
+            }
+
+            startLocationSimulation() {
+                if (!this.locationSimulationInterval) {
+                    this.locationSimulationInterval = setInterval(() => {
+                        Object.keys(this.connectedDevices).forEach(deviceId => {
+                            const device = this.connectedDevices[deviceId];
+                            
+                            // Simulate small movements
+                            const currentLat = device.location.latitude;
+                            const currentLng = device.location.longitude;
+                            const newLat = currentLat + (Math.random() - 0.5) * 0.01;
+                            const newLng = currentLng + (Math.random() - 0.5) * 0.01;
+
+                            const locationUpdate = {
+                                type: 'location_update',
+                                deviceName: device.deviceName,
+                                latitude: newLat,
+                                longitude: newLng,
+                                accuracy: 5 + Math.random() * 25,
+                                speed: Math.random() * 50, // km/h
+                                heading: Math.random() * 360,
+                                timestamp: new Date().toISOString()
+                            };
+
+                            this.handleLocationUpdate(deviceId, locationUpdate);
+                        });
+                    }, parseInt(document.getElementById('updateInterval').value));
+                }
+            }
+
+            addDevice(deviceInfo) {
+                this.connectedDevices[deviceInfo.deviceId] = deviceInfo;
+                this.createDeviceMarker(deviceInfo);
+                this.updateDevicesList();
+                this.updateStats();
+            }
+
+            removeDevice(deviceId) {
+                // Remove marker from map
+                if (this.deviceMarkers[deviceId]) {
+                    this.map.removeLayer(this.deviceMarkers[deviceId]);
+                    delete this.deviceMarkers[deviceId];
+                }
+
+                // Remove path from map
+                if (this.devicePaths[deviceId]) {
+                    this.map.removeLayer(this.devicePaths[deviceId]);
+                    delete this.devicePaths[deviceId];
+                }
+
+                // Remove from connected devices
+                delete this.connectedDevices[deviceId];
+
+                this.updateDevicesList();
+                this.updateStats();
+            }
+
+            createDeviceMarker(deviceInfo) {
+                const lat = deviceInfo.location.latitude;
+                const lng = deviceInfo.location.longitude;
+                
+                // Create custom marker icon
+                const markerIcon = L.divIcon({
+                    html: `<div style="background: linear-gradient(45deg, #667eea, #764ba2); 
+                                      width: 25px; height: 25px; border-radius: 50%; 
+                                      border: 3px solid white; box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                                      display: flex; align-items: center; justify-content: center;
+                                      color: white; font-size: 12px; font-weight: bold;">
+                                      📱
+                           </div>`,
+                    className: 'custom-device-marker',
+                    iconSize: [31, 31],
+                    iconAnchor: [15, 15]
+                });
+
+                const marker = L.marker([lat, lng], { icon: markerIcon }).addTo(this.map);
+                
+                // Add popup with device info
+                const popupContent = this.createDevicePopup(deviceInfo);
+                marker.bindPopup(popupContent);
+
+                // Add accuracy circle
+                const accuracyCircle = L.circle([lat, lng], {
+                    radius: deviceInfo.location.accuracy,
+                    color: '#667eea',
+                    fillColor: '#667eea',
+                    fillOpacity: 0.2,
+                    weight: 2
+                }).addTo(this.map);
+
+                this.deviceMarkers[deviceInfo.deviceId] = {
+                    marker: marker,
+                    circle: accuracyCircle
+                };
+
+                // Initialize path
+                this.devicePaths[deviceInfo.deviceId] = {
+                    coordinates: [[lat, lng]],
+                    polyline: null
+                };
+            }
+
+            createDevicePopup(deviceInfo) {
+                return `
+                    <div style="min-width: 200px;">
+                        <h4 style="margin: 0 0 10px 0; color: #2c3e50;">📱 ${deviceInfo.deviceName}</h4>
+                        <p style="margin: 0; font-size: 12px; color: #666;">ID: ${deviceInfo.deviceId}</p>
+                        <hr style="margin: 10px 0;">
+                        <div style="font-size: 12px;">
+                            <p><strong>📍 Location:</strong><br>
+                               ${deviceInfo.location.latitude.toFixed(6)}, ${deviceInfo.location.longitude.toFixed(6)}</p>
+                            <p><strong>🎯 Accuracy:</strong> ${Math.round(deviceInfo.location.accuracy)}m</p>
+                            <p><strong>🕒 Last Update:</strong><br>${new Date(deviceInfo.location.timestamp).toLocaleString()}</p>
+                        </div>
+                        <hr style="margin: 10px 0;">
+                        <div style="display: flex; gap: 5px;">
+                            <button onclick="dashboard.focusDevice('${deviceInfo.deviceId}')" 
+                                    style="padding: 5px 10px; border: none; background: #667eea; color: white; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                🎯 Focus
+                            </button>
+                            <button onclick="dashboard.trackDevice('${deviceInfo.deviceId}')" 
+                                    style="padding: 5px 10px; border: none; background: #27ae60; color: white; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                📊 Track
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            handleLocationUpdate(deviceId, locationData) {
+                const device = this.connectedDevices[deviceId];
+                if (!device) return;
+
+                // Update device location
+                device.location = {
+                    latitude: locationData.latitude,
+                    longitude: locationData.longitude,
+                    accuracy: locationData.accuracy,
+                    speed: locationData.speed,
+                    heading: locationData.heading,
+                    timestamp: locationData.timestamp
+                };
+                device.lastSeen = locationData.timestamp;
+
+                // Update marker position
+                if (this.deviceMarkers[deviceId]) {
+                    const newLatLng = [locationData.latitude, locationData.longitude];
+                    this.deviceMarkers[deviceId].marker.setLatLng(newLatLng);
+                    this.deviceMarkers[deviceId].circle.setLatLng(newLatLng).setRadius(locationData.accuracy);
+                    
+                    // Update popup
+                    const popupContent = this.createDevicePopup(device);
+                    this.deviceMarkers[deviceId].marker.setPopupContent(popupContent);
+                }
+
+                // Update path
+                if (this.devicePaths[deviceId]) {
+                    this.devicePaths[deviceId].coordinates.push([locationData.latitude, locationData.longitude]);
+                    
+                    // Keep only last 50 coordinates to prevent memory issues
+                    if (this.devicePaths[deviceId].coordinates.length > 50) {
+                        this.devicePaths[deviceId].coordinates.shift();
+                    }
+
+                    // Update polyline
+                    if (this.showPaths) {
+                        if (this.devicePaths[deviceId].polyline) {
+                            this.map.removeLayer(this.devicePaths[deviceId].polyline);
+                        }
+                        
+                        this.devicePaths[deviceId].polyline = L.polyline(
+                            this.devicePaths[deviceId].coordinates, 
+                            {
+                                color: this.getDeviceColor(deviceId),
+                                weight: 3,
+                                opacity: 0.7,
+                                dashArray: '5, 10'
+                            }
+                        ).addTo(this.map);
+                    }
+                }
+
+                this.totalUpdates++;
+                this.updateDevicesList();
+                this.updateStats();
+                
+                // Check for alerts
+                this.checkLocationAlerts(deviceId, locationData);
+                
+                this.addLog(`Location update from ${device.deviceName}: ${locationData.latitude.toFixed(4)}, ${locationData.longitude.toFixed(4)}`, 'info');
+            }
+
+            getDeviceColor(deviceId) {
+                const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c'];
+                const deviceIds = Object.keys(this.connectedDevices);
+                const index = deviceIds.indexOf(deviceId);
+                return colors[index % colors.length];
+            }
+
+            checkLocationAlerts(deviceId, locationData) {
+                const device = this.connectedDevices[deviceId];
+                
+                // Check for low accuracy
+                if (locationData.accuracy > 100) {
+                    this.showAlert(`Low GPS accuracy for ${device.deviceName}: ${Math.round(locationData.accuracy)}m`, 'warning');
+                }
+
+                // Check for high speed (possible error)
+                if (locationData.speed && locationData.speed > 120) {
+                    this.showAlert(`High speed detected for ${device.deviceName}: ${Math.round(locationData.speed)} km/h`, 'warning');
+                }
+
+                // Check if device hasn't updated for too long
+                const lastUpdate = new Date(locationData.timestamp);
+                const now = new Date();
+                const timeDiff = (now - lastUpdate) / 1000 / 60; // minutes
+                
+                if (timeDiff > 10) {
+                    this.showAlert(`${device.deviceName} hasn't updated for ${Math.round(timeDiff)} minutes`, 'error');
+                }
+            }
+
+            updateDevicesList() {
+                const devicesList = document.getElementById('devicesList');
+                const deviceCount = document.getElementById('deviceCount');
+                
+                const devices = Object.values(this.connectedDevices);
+                deviceCount.textContent = devices.length;
+
+                if (devices.length === 0) {
+                    devicesList.innerHTML = '<p style="text-align: center; color: #666; font-style: italic; margin-top: 20px;">No devices connected</p>';
+                    return;
+                }
+
+                devicesList.innerHTML = devices.map(device => {
+                    const isOnline = this.isDeviceOnline(device);
+                    const isSelected = this.selectedDevice === device.deviceId;
+                    
+                    return `
+                        <div class="device-item ${isSelected ? 'selected' : ''} ${!isOnline ? 'offline' : ''}" 
+                             onclick="dashboard.selectDevice('${device.deviceId}')">
+                            <div class="device-header">
+                                <span class="device-name">📱 ${device.deviceName}</span>
+                                <span class="device-status ${isOnline ? 'online' : 'offline'}">
+                                    ${isOnline ? 'Online' : 'Offline'}
+                                </span>
+                            </div>
+                            <div class="device-info">
+                                <div>ID: ${device.deviceId}</div>
+                                <div>Accuracy: ${Math.round(device.location.accuracy)}m</div>
+                                <div>Last seen: ${new Date(device.lastSeen).toLocaleTimeString()}</div>
+                                <div class="device-location">
+                                    📍 ${device.location.latitude.toFixed(4)}, ${device.location.longitude.toFixed(4)}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            isDeviceOnline(device) {
+                const lastSeen = new Date(device.lastSeen);
+                const now = new Date();
+                const diffMinutes = (now - lastSeen) / 1000 / 60;
+                return diffMinutes < 5; // Consider offline if no update for 5 minutes
+            }
+
+            selectDevice(deviceId) {
+                this.selectedDevice = deviceId;
+                this.updateDevicesList();
+                this.focusDevice(deviceId);
+            }
+
+            focusDevice(deviceId) {
+                const device = this.connectedDevices[deviceId];
+                if (device) {
+                    this.map.setView([device.location.latitude, device.location.longitude], 16);
+                    if (this.deviceMarkers[deviceId]) {
+                        this.deviceMarkers[deviceId].marker.openPopup();
+                    }
+                }
+            }
+
+            trackDevice(deviceId) {
+                // Toggle tracking for specific device
+                this.selectedDevice = deviceId;
+                this.focusDevice(deviceId);
+                
+                // Auto-follow the device
+                if (this.trackingInterval) {
+                    clearInterval(this.trackingInterval);
+                }
+                
+                this.trackingInterval = setInterval(() => {
+                    if (this.selectedDevice === deviceId && this.connectedDevices[deviceId]) {
+                        this.focusDevice(deviceId);
+                    }
+                }, 5000);
+                
+                this.showAlert(`Now tracking ${this.connectedDevices[deviceId].deviceName}`, 'info');
+            }
+
+            updateServerStatus(isOnline) {
+                const serverStatus = document.getElementById('serverStatus');
+                const startBtn = document.getElementById('startServerBtn');
+                const stopBtn = document.getElementById('stopServerBtn');
+
+                if (isOnline) {
+                    serverStatus.innerHTML = '<div class="status-dot online"></div><span>Server Online</span>';
+                    serverStatus.className = 'status-indicator online';
+                    startBtn.style.display = 'none';
+                    stopBtn.style.display = 'inline-block';
+                } else {
+                    serverStatus.innerHTML = '<div class="status-dot offline"></div><span>Server Offline</span>';
+                    serverStatus.className = 'status-indicator offline';
+                    startBtn.style.display = 'inline-block';
+                    stopBtn.style.display = 'none';
+                }
+            }
+
+            updateStats() {
+                document.getElementById('activeDevices').textContent = Object.keys(this.connectedDevices).length;
+                document.getElementById('totalUpdates').textContent = this.totalUpdates;
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            }
+
+            startStatsUpdate() {
+                setInterval(() => {
+                    if (this.startTime) {
+                        const uptime = new Date() - this.startTime;
+                        const hours = Math.floor(uptime / (1000 * 60 * 60));
+                        const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((uptime % (1000 * 60)) / 1000);
+                        
+                        document.getElementById('uptime').textContent = 
+                            `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    }
+                }, 1000);
+            }
+
+            showAlert(message, type = 'info') {
+                const alert = {
+                    id: Date.now(),
+                    message: message,
+                    type: type,
+                    timestamp: new Date().toISOString()
+                };
+
+                this.alerts.unshift(alert);
+                if (this.alerts.length > 10) {
+                    this.alerts.pop();
+                }
+
+                this.updateAlertsPanel();
+            }
+
+            updateAlertsPanel() {
+                const alertPanel = document.getElementById('alertPanel');
+                const alertList = document.getElementById('alertList');
+
+                if (this.alerts.length > 0) {
+                    alertPanel.classList.add('show');
+                    alertList.innerHTML = this.alerts.map(alert => `
+                        <div class="alert-item">
+                            <div>${alert.message}</div>
+                            <div class="alert-time">${new Date(alert.timestamp).toLocaleString()}</div>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            closeAlerts() {
+                document.getElementById('alertPanel').classList.remove('show');
+            }
+
+            addLog(message, type = 'info') {
+                const log = {
+                    timestamp: new Date().toISOString(),
+                    message: message,
+                    type: type
+                };
+
+                this.logs.unshift(log);
+                if (this.logs.length > 100) {
+                    this.logs.pop();
+                }
+
+                this.updateLogsPanel();
+            }
+
+            updateLogsPanel() {
+                const logEntries = document.getElementById('logEntries');
+                if (logEntries && document.getElementById('connectionLogs').classList.contains('show')) {
+                    logEntries.innerHTML = this.logs.slice(0, 20).map(log => `
+                        <div class="log-entry log-${log.type}">
+                            <span class="log-timestamp">[${new Date(log.timestamp).toLocaleTimeString()}]</span>
+                            ${log.message}
+                        </div>
+                    `).join('');
+                    logEntries.scrollTop = 0;
+                }
+            }
+
+            saveSettings() {
+                const settings = {
+                    serverPort: document.getElementById('serverPort').value,
+                    updateInterval: document.getElementById('updateInterval').value,
+                    mapType: document.getElementById('mapType').value
+                };
+                localStorage.setItem('monitoringSettings', JSON.stringify(settings));
+            }
+
+            loadSettings() {
+                const saved = localStorage.getItem('monitoringSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    document.getElementById('serverPort').value = settings.serverPort || '8080';
+                    document.getElementById('updateInterval').value = settings.updateInterval || '5000';
+                    document.getElementById('mapType').value = settings.mapType || 'osm';
+                    this.updateMapLayer();
+                }
+            }
+        }
+
+        // Global functions for HTML onclick events
+        let dashboard;
+
+        function centerAllDevices() {
+            const devices = Object.values(dashboard.connectedDevices);
+            if (devices.length === 0) return;
+
+            const bounds = L.latLngBounds();
+            devices.forEach(device => {
+                bounds.extend([device.location.latitude, device.location.longitude]);
+            });
+            dashboard.map.fitBounds(bounds, { padding: [20, 20] });
+        }
+
+        function togglePaths() {
+            dashboard.showPaths = !dashboard.showPaths;
+            
+            Object.keys(dashboard.devicePaths).forEach(deviceId => {
+                if (dashboard.devicePaths[deviceId].polyline) {
+                    if (dashboard.showPaths) {
+                        dashboard.devicePaths[deviceId].polyline.addTo(dashboard.map);
+                    } else {
+                        dashboard.map.removeLayer(dashboard.devicePaths[deviceId].polyline);
+                    }
+                }
+            });
+
+            dashboard.showAlert(`Path visualization ${dashboard.showPaths ? 'enabled' : 'disabled'}`, 'info');
+        }
+
+        function exportData() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                devices: dashboard.connectedDevices,
+                totalUpdates: dashboard.totalUpdates,
+                uptime: dashboard.startTime ? new Date() - dashboard.startTime : 0
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `location-data-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            dashboard.showAlert('Location data exported successfully', 'success');
+        }
+
+        function toggleLogs() {
+            const logsPanel = document.getElementById('connectionLogs');
+            logsPanel.classList.toggle('show');
+            if (logsPanel.classList.contains('show')) {
+                dashboard.updateLogsPanel();
+            }
+        }
+
+        function refreshMap() {
+            dashboard.map.invalidateSize();
+            dashboard.updateMapLayer();
+            dashboard.showAlert('Map refreshed', 'success');
+        }
+
+        function toggleFullscreen() {
+            const mapContainer = document.querySelector('.map-container');
+            if (!document.fullscreenElement) {
+                mapContainer.requestFullscreen().then(() => {
+                    setTimeout(() => dashboard.map.invalidateSize(), 100);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function downloadMapScreenshot() {
+            // This would require additional libraries like html2canvas
+            dashboard.showAlert('Screenshot feature would require additional libraries', 'info');
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            dashboard = new LocationMonitoringDashboard();
+            
+            // Add some demo alerts after initialization
+            setTimeout(() => {
+                dashboard.showAlert('Dashboard initialized successfully', 'success');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
