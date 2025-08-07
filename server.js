@@ -1025,7 +1025,9 @@ class LocationTrackingServer {
 }
 
 // Initialize server
-var server = new LocationTrackingServer(8080, 4000);
+const port = process.env.PORT || 4000;
+var server = new LocationTrackingServer(port, port);
+
 
 // Handle graceful shutdown
 process.on('SIGINT', function() {
