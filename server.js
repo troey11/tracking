@@ -1,5 +1,6 @@
 // WebSocket Location Tracking Server
 // Node.js backend untuk menerima dan menyebarkan data lokasi realtime
+// Compatible with Node.js 10+
 
 const WebSocket = require('ws');
 const express = require('express');
@@ -7,11 +8,12 @@ const http = require('http');
 const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
+const crypto = require('crypto');
 
 class LocationTrackingServer {
-    constructor(port = 8080, httpPort = 3000) {
-        this.wsPort = port;
-        this.httpPort = httpPort;
+    constructor(port, httpPort) {
+        this.wsPort = port || 8080;
+        this.httpPort = httpPort || 4000;
         this.connectedDevices = new Map();
         this.locationHistory = new Map();
         this.webClients = new Set();
@@ -21,9 +23,12 @@ class LocationTrackingServer {
         this.initWebSocketServer();
         this.startPeriodicTasks();
         
-        console.log(`?? Location Tracking Server initialized`);
-        console.log(`?? WebSocket Server: ws://localhost:${this.wsPort}`);
-        console.log(`?? HTTP Server: http://localhost:${this.httpPort}`);
+        console.log('📡 Location Tracking Server initialized');
+        console.log('🔌 WebSocket Server: ws://localhost:' + this.wsPort);
+        console.log('🌐 HTTP Server: http://localhost:' + this.httpPort);
+        console.log('📊 Dashboard: http://localhost:' + this.httpPort + '/dashboard');
+        console.log('📱 Mobile App: http://localhost:' + this.httpPort + '/mobile');
+        console.log('================================');
     }
 
     initExpressServer() {
@@ -39,18 +44,22 @@ class LocationTrackingServer {
         this.setupRoutes();
 
         // Start HTTP server
-        this.server.listen(this.httpPort, () => {
-            console.log(`? HTTP Server running on port ${this.httpPort}`);
+        var self = this;
+        this.server.listen(this.httpPort, function() {
+            console.log('✅ HTTP Server running on port ' + self.httpPort);
         });
     }
 
     setupRoutes() {
+        var self = this;
+
         // Get all connected devices
-        this.app.get('/api/devices', (req, res) => {
-            const devices = Array.from(this.connectedDevices.values()).map(device => ({
-                ...device,
-                isOnline: this.isDeviceOnline(device)
-            }));
+        this.app.get('/api/devices', function(req, res) {
+            var devices = Array.from(self.connectedDevices.values()).map(function(device) {
+                var deviceCopy = Object.assign({}, device);
+                deviceCopy.isOnline = self.isDeviceOnline(device);
+                return deviceCopy;
+            });
             
             res.json({
                 success: true,
@@ -60,9 +69,9 @@ class LocationTrackingServer {
         });
 
         // Get specific device info
-        this.app.get('/api/devices/:deviceId', (req, res) => {
-            const deviceId = req.params.deviceId;
-            const device = this.connectedDevices.get(deviceId);
+        this.app.get('/api/devices/:deviceId', function(req, res) {
+            var deviceId = req.params.deviceId;
+            var device = self.connectedDevices.get(deviceId);
             
             if (!device) {
                 return res.status(404).json({
@@ -71,29 +80,29 @@ class LocationTrackingServer {
                 });
             }
 
+            var deviceInfo = Object.assign({}, device);
+            deviceInfo.isOnline = self.isDeviceOnline(device);
+            deviceInfo.locationHistory = self.locationHistory.get(deviceId) || [];
+
             res.json({
                 success: true,
-                data: {
-                    ...device,
-                    isOnline: this.isDeviceOnline(device),
-                    locationHistory: this.locationHistory.get(deviceId) || []
-                }
+                data: deviceInfo
             });
         });
 
         // Get location history for a device
-        this.app.get('/api/devices/:deviceId/history', (req, res) => {
-            const deviceId = req.params.deviceId;
-            const limit = parseInt(req.query.limit) || 100;
-            const startDate = req.query.startDate;
-            const endDate = req.query.endDate;
+        this.app.get('/api/devices/:deviceId/history', function(req, res) {
+            var deviceId = req.params.deviceId;
+            var limit = parseInt(req.query.limit) || 100;
+            var startDate = req.query.startDate;
+            var endDate = req.query.endDate;
 
-            let history = this.locationHistory.get(deviceId) || [];
+            var history = self.locationHistory.get(deviceId) || [];
 
             // Filter by date range if provided
             if (startDate || endDate) {
-                history = history.filter(location => {
-                    const locationTime = new Date(location.timestamp);
+                history = history.filter(function(location) {
+                    var locationTime = new Date(location.timestamp);
                     if (startDate && locationTime < new Date(startDate)) return false;
                     if (endDate && locationTime > new Date(endDate)) return false;
                     return true;
@@ -111,8 +120,8 @@ class LocationTrackingServer {
         });
 
         // Get server statistics
-        this.app.get('/api/stats', (req, res) => {
-            const stats = this.getServerStats();
+        this.app.get('/api/stats', function(req, res) {
+            var stats = self.getServerStats();
             res.json({
                 success: true,
                 data: stats
@@ -120,14 +129,14 @@ class LocationTrackingServer {
         });
 
         // Export location data
-        this.app.get('/api/export/:format', (req, res) => {
-            const format = req.params.format; // json, csv, gpx
-            const deviceId = req.query.deviceId;
+        this.app.get('/api/export/:format', function(req, res) {
+            var format = req.params.format; // json, csv, gpx
+            var deviceId = req.query.deviceId;
             
             try {
-                const exportData = this.exportLocationData(format, deviceId);
+                var exportData = self.exportLocationData(format, deviceId);
                 
-                const filename = `location-export-${new Date().toISOString().slice(0, 10)}.${format}`;
+                var filename = 'location-export-' + new Date().toISOString().slice(0, 10) + '.' + format;
                 
                 switch (format) {
                     case 'json':
@@ -141,7 +150,7 @@ class LocationTrackingServer {
                         break;
                 }
                 
-                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
                 res.send(exportData);
                 
             } catch (error) {
@@ -153,11 +162,11 @@ class LocationTrackingServer {
         });
 
         // Send command to specific device
-        this.app.post('/api/devices/:deviceId/command', (req, res) => {
-            const deviceId = req.params.deviceId;
-            const command = req.body;
+        this.app.post('/api/devices/:deviceId/command', function(req, res) {
+            var deviceId = req.params.deviceId;
+            var command = req.body;
 
-            const device = this.connectedDevices.get(deviceId);
+            var device = self.connectedDevices.get(deviceId);
             if (!device) {
                 return res.status(404).json({
                     success: false,
@@ -173,11 +182,11 @@ class LocationTrackingServer {
             }
 
             try {
-                device.websocket.send(JSON.stringify({
-                    type: 'command',
-                    ...command,
-                    timestamp: new Date().toISOString()
-                }));
+                var commandMessage = Object.assign({}, command);
+                commandMessage.type = 'command';
+                commandMessage.timestamp = new Date().toISOString();
+                
+                device.websocket.send(JSON.stringify(commandMessage));
 
                 res.json({
                     success: true,
@@ -192,61 +201,69 @@ class LocationTrackingServer {
         });
 
         // Serve the monitoring dashboard
-        this.app.get('/dashboard', (req, res) => {
+        this.app.get('/dashboard', function(req, res) {
             res.sendFile(path.join(__dirname, 'dashboard.html'));
         });
 
         // Serve the mobile app
-        this.app.get('/mobile', (req, res) => {
+        this.app.get('/mobile', function(req, res) {
             res.sendFile(path.join(__dirname, 'mobile.html'));
         });
     }
 
     initWebSocketServer() {
-        this.wss = new WebSocket.Server({ 
-            port: this.wsPort,
-            perMessageDeflate: false
-        });
+        var self = this;
+        this.wss = new WebSocket.Server({
+    port: this.wsPort,
+    host: '0.0.0.0',
+    perMessageDeflate: false
+});
 
-        this.wss.on('connection', (ws, req) => {
-            const clientIP = req.socket.remoteAddress;
-            const userAgent = req.headers['user-agent'];
+        this.wss.on('connection', function(ws, req) {
+            var clientIP = req.socket.remoteAddress;
+            var userAgent = req.headers['user-agent'];
             
-            console.log(`?? New connection from ${clientIP}`);
-            console.log(`?? User Agent: ${userAgent}`);
+            console.log('🔗 New connection from ' + clientIP);
+            console.log('📱 User Agent: ' + userAgent);
 
-            ws.on('message', (data) => {
+            ws.on('message', function(data) {
                 try {
-                    const message = JSON.parse(data.toString());
-                    this.handleWebSocketMessage(ws, message, clientIP);
+                    var message = JSON.parse(data.toString());
+                    self.handleWebSocketMessage(ws, message, clientIP);
                 } catch (error) {
-                    console.error('? Invalid JSON message:', error);
-                    this.sendError(ws, 'Invalid JSON format');
+                    console.error('❌ Invalid JSON message:', error);
+                    self.sendError(ws, 'Invalid JSON format');
                 }
             });
 
-            ws.on('close', (code, reason) => {
-                console.log(`?? Connection closed: ${code} - ${reason}`);
-                this.handleDeviceDisconnection(ws);
+            ws.on('close', function(code, reason) {
+                console.log('🔌 Connection closed: ' + code + ' - ' + reason);
+                self.handleDeviceDisconnection(ws);
             });
 
-            ws.on('error', (error) => {
-                console.error('? WebSocket error:', error);
+            ws.on('error', function(error) {
+                console.error('❌ WebSocket error:', error);
             });
 
             // Send welcome message
-            this.sendMessage(ws, {
+            self.sendMessage(ws, {
                 type: 'welcome',
                 message: 'Connected to Location Tracking Server',
                 serverTime: new Date().toISOString()
             });
         });
 
-        console.log(`? WebSocket Server running on port ${this.wsPort}`);
+        console.log('✅ WebSocket Server running on port ' + this.wsPort);
+        console.log('Ready to accept device connections...');
+        console.log('================================');
     }
 
     handleWebSocketMessage(ws, message, clientIP) {
-        console.log(`?? Received message type: ${message.type}`);
+        // Only log important message types to reduce spam
+        var importantTypes = ['device_info', 'location_update', 'location_error', 'web_client_connect', 'stop_tracking'];
+        if (importantTypes.includes(message.type)) {
+            console.log('📨 Received message type: ' + message.type);
+        }
 
         switch (message.type) {
             case 'device_info':
@@ -255,6 +272,10 @@ class LocationTrackingServer {
 
             case 'location_update':
                 this.handleLocationUpdate(ws, message);
+                break;
+
+            case 'location_error':
+                this.handleLocationError(ws, message);
                 break;
 
             case 'web_client_connect':
@@ -268,19 +289,27 @@ class LocationTrackingServer {
                 });
                 break;
 
+            case 'pong':
+                this.handlePongMessage(ws, message);
+                break;
+
             case 'stop_tracking':
                 this.handleStopTracking(ws);
                 break;
 
+            case 'device_status':
+                this.handleDeviceStatus(ws, message);
+                break;
+
             default:
-                console.log(`?? Unknown message type: ${message.type}`);
+                console.log('❓ Unknown message type: ' + message.type);
         }
     }
 
     handleDeviceRegistration(ws, message, clientIP) {
-        const deviceId = this.generateDeviceId(message.deviceName, clientIP);
+        var deviceId = this.generateDeviceId(message.deviceName, clientIP);
         
-        const deviceInfo = {
+        var deviceInfo = {
             deviceId: deviceId,
             deviceName: message.deviceName || 'Unknown Device',
             userAgent: message.userAgent || 'Unknown',
@@ -301,7 +330,7 @@ class LocationTrackingServer {
             this.locationHistory.set(deviceId, []);
         }
 
-        console.log(`? Device registered: ${deviceInfo.deviceName} (${deviceId})`);
+        console.log('📱 Device registered: ' + deviceInfo.deviceName + ' (' + deviceId + ')');
 
         // Send device ID back to client
         this.sendMessage(ws, {
@@ -317,16 +346,17 @@ class LocationTrackingServer {
         });
 
         this.saveDeviceToFile(deviceInfo);
+        this.printServerStatus();
     }
 
     handleLocationUpdate(ws, message) {
-        const deviceId = ws.deviceId;
+        var deviceId = ws.deviceId;
         if (!deviceId) {
             this.sendError(ws, 'Device not registered');
             return;
         }
 
-        const device = this.connectedDevices.get(deviceId);
+        var device = this.connectedDevices.get(deviceId);
         if (!device) {
             this.sendError(ws, 'Device not found');
             return;
@@ -346,7 +376,7 @@ class LocationTrackingServer {
         };
 
         // Add to location history
-        const history = this.locationHistory.get(deviceId);
+        var history = this.locationHistory.get(deviceId);
         history.push(device.location);
 
         // Keep only last 1000 locations per device
@@ -354,7 +384,8 @@ class LocationTrackingServer {
             history.shift();
         }
 
-        console.log(`?? Location update from ${device.deviceName}: ${message.latitude.toFixed(6)}, ${message.longitude.toFixed(6)}`);
+        console.log('📍 Location update from ' + device.deviceName + ': ' + 
+                   message.latitude.toFixed(6) + ', ' + message.longitude.toFixed(6));
 
         // Send acknowledgment
         this.sendMessage(ws, {
@@ -377,14 +408,137 @@ class LocationTrackingServer {
         this.saveLocationToFile(deviceId, device.location);
     }
 
+    handleLocationError(ws, message) {
+        var deviceId = ws.deviceId;
+        if (!deviceId) {
+            console.log('❌ Location error from unregistered device');
+            return;
+        }
+
+        var device = this.connectedDevices.get(deviceId);
+        if (!device) {
+            console.log('❌ Location error from unknown device: ' + deviceId);
+            return;
+        }
+
+        console.log('❌ Location error from ' + device.deviceName + ': ' + message.error + ' (Code: ' + message.code + ')');
+        
+        // Update device status
+        device.lastError = {
+            message: message.error,
+            code: message.code,
+            timestamp: message.timestamp
+        };
+
+        // Broadcast to web clients
+        this.broadcastToWebClients({
+            type: 'location_error',
+            deviceId: deviceId,
+            deviceName: device.deviceName,
+            error: message.error,
+            code: message.code,
+            timestamp: message.timestamp
+        });
+
+        // Log error to file
+        this.logLocationError(deviceId, message);
+    }
+
+    handlePongMessage(ws, message) {
+        var deviceId = ws.deviceId;
+        if (deviceId) {
+            var device = this.connectedDevices.get(deviceId);
+            if (device) {
+                device.lastPong = new Date().toISOString();
+                device.latency = Date.now() - new Date(message.timestamp).getTime();
+                // console.log('🏓 Pong received from ' + device.deviceName + ' (Latency: ' + device.latency + 'ms)');
+            }
+        }
+    }
+
+    handleDeviceStatus(ws, message) {
+        var deviceId = ws.deviceId;
+        if (!deviceId) {
+            return;
+        }
+
+        var device = this.connectedDevices.get(deviceId);
+        if (!device) {
+            return;
+        }
+
+        // Update device status information
+        if (message.batteryLevel !== undefined) {
+            device.batteryLevel = message.batteryLevel;
+        }
+        
+        if (message.isCharging !== undefined) {
+            device.isCharging = message.isCharging;
+        }
+
+        if (message.networkType) {
+            device.networkType = message.networkType;
+        }
+
+        device.lastStatusUpdate = new Date().toISOString();
+
+        console.log('📊 Status update from ' + device.deviceName + 
+                   (message.batteryLevel ? ' (Battery: ' + message.batteryLevel + '%)' : ''));
+
+        // Broadcast to web clients
+        this.broadcastToWebClients({
+            type: 'device_status',
+            deviceId: deviceId,
+            deviceName: device.deviceName,
+            batteryLevel: device.batteryLevel,
+            isCharging: device.isCharging,
+            networkType: device.networkType,
+            timestamp: message.timestamp
+        });
+    }
+
+    logLocationError(deviceId, errorMessage) {
+        var logDir = './logs';
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir);
+        }
+
+        var logEntry = {
+            timestamp: new Date().toISOString(),
+            deviceId: deviceId,
+            error: errorMessage
+        };
+
+        fs.appendFileSync(
+            path.join(logDir, 'location-errors.log'), 
+            JSON.stringify(logEntry) + '\n'
+        );
+    }
+
+    handleStopTracking(ws) {
+        var deviceId = ws.deviceId;
+        if (deviceId) {
+            var device = this.connectedDevices.get(deviceId);
+            if (device) {
+                console.log('⏹️ Tracking stopped for ' + device.deviceName);
+                
+                this.broadcastToWebClients({
+                    type: 'tracking_stopped',
+                    deviceId: deviceId
+                });
+            }
+        }
+    }
+
     handleWebClientConnection(ws) {
+        var self = this;
         this.webClients.add(ws);
-        console.log(`?? Web client connected. Total: ${this.webClients.size}`);
+        console.log('🖥️ Web client connected. Total: ' + this.webClients.size);
 
         // Send current device list to new web client
-        const devices = Array.from(this.connectedDevices.values()).map(device => 
-            this.sanitizeDeviceInfo(device)
-        );
+        var devices = Array.from(this.connectedDevices.values()).map(function(device) {
+            return self.sanitizeDeviceInfo(device);
+        });
 
         this.sendMessage(ws, {
             type: 'initial_data',
@@ -392,17 +546,17 @@ class LocationTrackingServer {
             stats: this.getServerStats()
         });
 
-        ws.on('close', () => {
-            this.webClients.delete(ws);
-            console.log(`?? Web client disconnected. Total: ${this.webClients.size}`);
+        ws.on('close', function() {
+            self.webClients.delete(ws);
+            console.log('🖥️ Web client disconnected. Total: ' + self.webClients.size);
         });
     }
 
     handleDeviceDisconnection(ws) {
         if (ws.deviceId) {
-            const device = this.connectedDevices.get(ws.deviceId);
+            var device = this.connectedDevices.get(ws.deviceId);
             if (device) {
-                console.log(`?? Device disconnected: ${device.deviceName}`);
+                console.log('📱 Device disconnected: ' + device.deviceName);
                 
                 // Keep device info but mark as disconnected
                 device.websocket = null;
@@ -419,30 +573,15 @@ class LocationTrackingServer {
         }
     }
 
-    handleStopTracking(ws) {
-        const deviceId = ws.deviceId;
-        if (deviceId) {
-            const device = this.connectedDevices.get(deviceId);
-            if (device) {
-                console.log(`?? Tracking stopped for ${device.deviceName}`);
-                
-                this.broadcastToWebClients({
-                    type: 'tracking_stopped',
-                    deviceId: deviceId
-                });
-            }
-        }
-    }
-
     generateDeviceId(deviceName, clientIP) {
-        const timestamp = Date.now();
-        const hash = require('crypto')
+        var timestamp = Date.now();
+        var hash = crypto
             .createHash('md5')
             .update(deviceName + clientIP + timestamp)
             .digest('hex')
             .substring(0, 8);
         
-        return `${deviceName.replace(/\s+/g, '-')}-${hash}`;
+        return deviceName.replace(/\s+/g, '-') + '-' + hash;
     }
 
     sanitizeDeviceInfo(device) {
@@ -459,22 +598,31 @@ class LocationTrackingServer {
 
     isDeviceOnline(device) {
         if (!device.lastSeen) return false;
-        const lastSeen = new Date(device.lastSeen);
-        const now = new Date();
-        const diffMinutes = (now - lastSeen) / (1000 * 60);
-        return diffMinutes < 5 && device.websocket && device.websocket.readyState === WebSocket.OPEN;
+        
+        // Check WebSocket connection first
+        if (!device.websocket || device.websocket.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        
+        // Check if last seen is within reasonable time (2 minutes for online status)
+        var lastSeen = new Date(device.lastSeen);
+        var now = new Date();
+        var diffMinutes = (now - lastSeen) / (1000 * 60);
+        
+        return diffMinutes < 2;
     }
 
     broadcastToWebClients(message) {
-        const messageStr = JSON.stringify(message);
+        var messageStr = JSON.stringify(message);
+        var self = this;
         
-        this.webClients.forEach(client => {
+        this.webClients.forEach(function(client) {
             if (client.readyState === WebSocket.OPEN) {
                 try {
                     client.send(messageStr);
                 } catch (error) {
                     console.error('Failed to send to web client:', error);
-                    this.webClients.delete(client);
+                    self.webClients.delete(client);
                 }
             }
         });
@@ -499,8 +647,9 @@ class LocationTrackingServer {
     }
 
     checkGeofences(device) {
+        var self = this;
         // Example geofence check - customize based on your needs
-        const geofences = [
+        var geofences = [
             {
                 name: 'Office Area',
                 center: { lat: -6.2088, lng: 106.8456 },
@@ -517,21 +666,21 @@ class LocationTrackingServer {
             }
         ];
 
-        geofences.forEach(fence => {
-            const distance = this.calculateDistance(
+        geofences.forEach(function(fence) {
+            var distance = self.calculateDistance(
                 device.location.latitude,
                 device.location.longitude,
                 fence.center.lat,
                 fence.center.lng
             );
 
-            const isInside = distance <= fence.radius;
-            const wasInside = device.lastGeofenceStatus && device.lastGeofenceStatus[fence.name];
+            var isInside = distance <= fence.radius;
+            var wasInside = device.lastGeofenceStatus && device.lastGeofenceStatus[fence.name];
 
             if (isInside && !wasInside && fence.alertOnEntry) {
-                this.sendGeofenceAlert(device, fence, 'ENTERED');
+                self.sendGeofenceAlert(device, fence, 'ENTERED');
             } else if (!isInside && wasInside && fence.alertOnExit) {
-                this.sendGeofenceAlert(device, fence, 'EXITED');
+                self.sendGeofenceAlert(device, fence, 'EXITED');
             }
 
             // Update geofence status
@@ -543,7 +692,7 @@ class LocationTrackingServer {
     }
 
     sendGeofenceAlert(device, fence, action) {
-        const alert = {
+        var alert = {
             type: 'geofence_alert',
             deviceId: device.deviceId,
             deviceName: device.deviceName,
@@ -553,7 +702,7 @@ class LocationTrackingServer {
             location: device.location
         };
 
-        console.log(`?? Geofence Alert: ${device.deviceName} ${action} ${fence.name}`);
+        console.log('🚨 Geofence Alert: ' + device.deviceName + ' ' + action + ' ' + fence.name);
 
         // Broadcast to web clients
         this.broadcastToWebClients(alert);
@@ -563,31 +712,42 @@ class LocationTrackingServer {
     }
 
     calculateDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371e3; // Earth's radius in meters
-        const f1 = lat1 * Math.PI/180;
-        const f2 = lat2 * Math.PI/180;
-        const ?f = (lat2-lat1) * Math.PI/180;
-        const ?? = (lon2-lon1) * Math.PI/180;
+        var R = 6371e3; // Earth's radius in meters
+        var f1 = lat1 * Math.PI/180;
+        var f2 = lat2 * Math.PI/180;
+        var df = (lat2-lat1) * Math.PI/180;
+        var dl = (lon2-lon1) * Math.PI/180;
 
-        const a = Math.sin(?f/2) * Math.sin(?f/2) +
+        var a = Math.sin(df/2) * Math.sin(df/2) +
                   Math.cos(f1) * Math.cos(f2) *
-                  Math.sin(??/2) * Math.sin(??/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                  Math.sin(dl/2) * Math.sin(dl/2);
+        var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
         return R * c; // Distance in meters
     }
 
     getServerStats() {
-        const uptime = new Date() - this.startTime;
-        const totalLocations = Array.from(this.locationHistory.values())
-            .reduce((sum, history) => sum + history.length, 0);
+        var uptime = new Date() - this.startTime;
+        var totalLocations = 0;
+        var self = this;
+
+        // Calculate total locations using forEach instead of reduce
+        this.locationHistory.forEach(function(history) {
+            totalLocations += history.length;
+        });
+
+        var onlineDevicesCount = 0;
+        this.connectedDevices.forEach(function(device) {
+            if (self.isDeviceOnline(device)) {
+                onlineDevicesCount++;
+            }
+        });
 
         return {
             uptime: uptime,
             uptimeFormatted: this.formatUptime(uptime),
             totalDevices: this.connectedDevices.size,
-            onlineDevices: Array.from(this.connectedDevices.values())
-                .filter(device => this.isDeviceOnline(device)).length,
+            onlineDevices: onlineDevicesCount,
             totalLocationUpdates: totalLocations,
             webClients: this.webClients.size,
             memoryUsage: process.memoryUsage(),
@@ -596,20 +756,23 @@ class LocationTrackingServer {
     }
 
     formatUptime(uptime) {
-        const seconds = Math.floor(uptime / 1000);
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        const remainingSeconds = seconds % 60;
+        var seconds = Math.floor(uptime / 1000);
+        var hours = Math.floor(seconds / 3600);
+        var minutes = Math.floor((seconds % 3600) / 60);
+        var remainingSeconds = seconds % 60;
 
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        return hours.toString().padStart(2, '0') + ':' +
+               minutes.toString().padStart(2, '0') + ':' +
+               remainingSeconds.toString().padStart(2, '0');
     }
 
-    exportLocationData(format, deviceId = null) {
-        let data = {};
+    exportLocationData(format, deviceId) {
+        var data = {};
+        var self = this;
         
         if (deviceId) {
-            const device = this.connectedDevices.get(deviceId);
-            const history = this.locationHistory.get(deviceId);
+            var device = this.connectedDevices.get(deviceId);
+            var history = this.locationHistory.get(deviceId);
             
             if (!device || !history) {
                 throw new Error('Device not found or no location history');
@@ -621,10 +784,10 @@ class LocationTrackingServer {
             };
         } else {
             // Export all devices
-            this.connectedDevices.forEach((device, id) => {
+            this.connectedDevices.forEach(function(device, id) {
                 data[id] = {
-                    device: this.sanitizeDeviceInfo(device),
-                    locations: this.locationHistory.get(id) || []
+                    device: self.sanitizeDeviceInfo(device),
+                    locations: self.locationHistory.get(id) || []
                 };
             });
         }
@@ -645,11 +808,19 @@ class LocationTrackingServer {
     }
 
     convertToCSV(data) {
-        let csv = 'DeviceID,DeviceName,Timestamp,Latitude,Longitude,Accuracy,Speed,Heading\n';
+        var csv = 'DeviceID,DeviceName,Timestamp,Latitude,Longitude,Accuracy,Speed,Heading\n';
         
-        Object.entries(data).forEach(([deviceId, deviceData]) => {
-            deviceData.locations.forEach(location => {
-                csv += `${deviceId},${deviceData.device.deviceName},${location.timestamp},${location.latitude},${location.longitude},${location.accuracy || ''},${location.speed || ''},${location.heading || ''}\n`;
+        Object.keys(data).forEach(function(deviceId) {
+            var deviceData = data[deviceId];
+            deviceData.locations.forEach(function(location) {
+                csv += deviceId + ',' + 
+                       deviceData.device.deviceName + ',' + 
+                       location.timestamp + ',' + 
+                       location.latitude + ',' + 
+                       location.longitude + ',' + 
+                       (location.accuracy || '') + ',' + 
+                       (location.speed || '') + ',' + 
+                       (location.heading || '') + '\n';
             });
         });
 
@@ -657,33 +828,34 @@ class LocationTrackingServer {
     }
 
     convertToGPX(data) {
-        let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Location Tracking Server">
-<metadata>
-    <name>Location Tracking Export</name>
-    <time>${new Date().toISOString()}</time>
-</metadata>\n`;
+        var gpx = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+                  '<gpx version="1.1" creator="Location Tracking Server">\n' +
+                  '<metadata>\n' +
+                  '    <name>Location Tracking Export</name>\n' +
+                  '    <time>' + new Date().toISOString() + '</time>\n' +
+                  '</metadata>\n';
 
-        Object.entries(data).forEach(([deviceId, deviceData]) => {
+        Object.keys(data).forEach(function(deviceId) {
+            var deviceData = data[deviceId];
             if (deviceData.locations.length === 0) return;
 
-            gpx += `<trk>
-    <name>${deviceData.device.deviceName}</name>
-    <trkseg>\n`;
+            gpx += '<trk>\n' +
+                   '    <name>' + deviceData.device.deviceName + '</name>\n' +
+                   '    <trkseg>\n';
 
-            deviceData.locations.forEach(location => {
-                gpx += `        <trkpt lat="${location.latitude}" lon="${location.longitude}">
-            <time>${location.timestamp}</time>`;
+            deviceData.locations.forEach(function(location) {
+                gpx += '        <trkpt lat="' + location.latitude + '" lon="' + location.longitude + '">\n' +
+                       '            <time>' + location.timestamp + '</time>';
                 
                 if (location.altitude) {
-                    gpx += `<ele>${location.altitude}</ele>`;
+                    gpx += '<ele>' + location.altitude + '</ele>';
                 }
                 
-                gpx += `</trkpt>\n`;
+                gpx += '</trkpt>\n';
             });
 
-            gpx += `    </trkseg>
-</trk>\n`;
+            gpx += '    </trkseg>\n' +
+                   '</trk>\n';
         });
 
         gpx += '</gpx>';
@@ -691,60 +863,71 @@ class LocationTrackingServer {
     }
 
     startPeriodicTasks() {
+        var self = this;
+        
         // Cleanup disconnected devices periodically
-        setInterval(() => {
-            this.cleanupDisconnectedDevices();
+        this.cleanupInterval = setInterval(function() {
+            self.cleanupDisconnectedDevices();
         }, 5 * 60 * 1000); // Every 5 minutes
 
-        // Send ping to all connected devices
-        setInterval(() => {
-            this.pingAllDevices();
-        }, 30 * 1000); // Every 30 seconds
+        // Send ping to all connected devices (reduced frequency)
+        this.pingInterval = setInterval(function() {
+            self.pingAllDevices();
+        }, 60 * 1000); // Every 60 seconds instead of 30
 
         // Save statistics periodically
-        setInterval(() => {
-            this.saveStatsToFile();
+        this.statsInterval = setInterval(function() {
+            self.saveStatsToFile();
         }, 10 * 60 * 1000); // Every 10 minutes
 
-        console.log('? Periodic tasks started');
+        console.log('⏰ Periodic tasks started (Ping: 60s, Cleanup: 5min, Stats: 10min)');
     }
 
     cleanupDisconnectedDevices() {
-        const now = new Date();
-        const maxOfflineTime = 30 * 60 * 1000; // 30 minutes
+        var now = new Date();
+        var maxOfflineTime = 30 * 60 * 1000; // 30 minutes
+        var self = this;
 
-        this.connectedDevices.forEach((device, deviceId) => {
-            if (!this.isDeviceOnline(device)) {
-                const lastSeen = new Date(device.lastSeen);
+        this.connectedDevices.forEach(function(device, deviceId) {
+            if (!self.isDeviceOnline(device)) {
+                var lastSeen = new Date(device.lastSeen);
                 if (now - lastSeen > maxOfflineTime) {
-                    console.log(`??? Removing inactive device: ${device.deviceName}`);
-                    this.connectedDevices.delete(deviceId);
+                    console.log('🗑️ Removing inactive device: ' + device.deviceName);
+                    self.connectedDevices.delete(deviceId);
                     
                     // Optionally keep location history or remove it too
-                    // this.locationHistory.delete(deviceId);
+                    // self.locationHistory.delete(deviceId);
                 }
             }
         });
     }
 
     pingAllDevices() {
-        this.connectedDevices.forEach((device) => {
+        var self = this;
+        var pingCount = 0;
+        
+        this.connectedDevices.forEach(function(device) {
             if (device.websocket && device.websocket.readyState === WebSocket.OPEN) {
-                this.sendMessage(device.websocket, {
+                self.sendMessage(device.websocket, {
                     type: 'ping',
                     timestamp: new Date().toISOString()
                 });
+                pingCount++;
             }
         });
+
+        if (pingCount > 0) {
+            console.log('🏓 Pinged ' + pingCount + ' devices');
+        }
     }
 
     saveDeviceToFile(deviceInfo) {
-        const logDir = './logs';
+        var logDir = './logs';
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir);
         }
 
-        const logEntry = {
+        var logEntry = {
             timestamp: new Date().toISOString(),
             action: 'device_connected',
             deviceId: deviceInfo.deviceId,
@@ -760,15 +943,15 @@ class LocationTrackingServer {
     }
 
     saveLocationToFile(deviceId, location) {
-        const logDir = './logs';
+        var logDir = './logs';
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir);
         }
 
-        const today = new Date().toISOString().slice(0, 10);
-        const filename = `locations-${today}.log`;
+        var today = new Date().toISOString().slice(0, 10);
+        var filename = 'locations-' + today + '.log';
 
-        const logEntry = {
+        var logEntry = {
             timestamp: new Date().toISOString(),
             deviceId: deviceId,
             location: location
@@ -781,7 +964,7 @@ class LocationTrackingServer {
     }
 
     logAlert(alert) {
-        const logDir = './logs';
+        var logDir = './logs';
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir);
         }
@@ -793,17 +976,15 @@ class LocationTrackingServer {
     }
 
     saveStatsToFile() {
-        const stats = this.getServerStats();
-        const logDir = './logs';
+        var stats = this.getServerStats();
+        var logDir = './logs';
         
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir);
         }
 
-        const statsEntry = {
-            timestamp: new Date().toISOString(),
-            ...stats
-        };
+        var statsEntry = Object.assign({}, stats);
+        statsEntry.timestamp = new Date().toISOString();
 
         fs.appendFileSync(
             path.join(logDir, 'server-stats.log'), 
@@ -811,12 +992,19 @@ class LocationTrackingServer {
         );
     }
 
+    printServerStatus() {
+        var stats = this.getServerStats();
+        console.log('📊 Server Status - Devices: ' + stats.onlineDevices + '/' + stats.totalDevices + 
+                   ' | Web Clients: ' + stats.webClients + 
+                   ' | Uptime: ' + stats.uptimeFormatted);
+    }
+
     // Graceful shutdown
     shutdown() {
-        console.log('?? Shutting down server...');
+        console.log('🔄 Shutting down server...');
 
         // Close WebSocket server
-        this.wss.clients.forEach(client => {
+        this.wss.clients.forEach(function(client) {
             if (client.readyState === WebSocket.OPEN) {
                 client.close(1000, 'Server shutdown');
             }
@@ -827,35 +1015,35 @@ class LocationTrackingServer {
         this.server.close();
 
         // Clear intervals
-        clearInterval(this.cleanupInterval);
-        clearInterval(this.pingInterval);
-        clearInterval(this.statsInterval);
+        if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        if (this.statsInterval) clearInterval(this.statsInterval);
 
-        console.log('? Server shutdown complete');
+        console.log('✅ Server shutdown complete');
         process.exit(0);
     }
 }
 
 // Initialize server
-const server = new LocationTrackingServer(8080, 3000);
+var server = new LocationTrackingServer(8080, 4000);
 
 // Handle graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', function() {
     server.shutdown();
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', function() {
     server.shutdown();
 });
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-    console.error('? Uncaught Exception:', error);
+process.on('uncaughtException', function(error) {
+    console.error('❌ Uncaught Exception:', error);
     server.shutdown();
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('? Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', function(reason, promise) {
+    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
     server.shutdown();
 });
 
