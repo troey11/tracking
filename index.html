@@ -687,6 +687,50 @@
 
                 this.currentLayer.addTo(this.map);
             }
+			
+			
+			connectToWebSocketServer(port) {
+     const socket = new WebSocket('ws://192.168.3.16:8080'); // pakai IP servermu
+
+
+    socket.onopen = () => {
+        this.addLog('Connected to WebSocket server', 'success');
+        socket.send(JSON.stringify({ type: 'web_client_connect' }));
+    };
+
+    socket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'device_connected') {
+                this.addDevice(data.device);
+            } else if (data.type === 'location_update') {
+                this.handleLocationUpdate(data.deviceId, data.location);
+            } else if (data.type === 'tracking_stopped') {
+                this.addLog('Tracking stopped for ' + data.deviceId, 'info');
+            } else if (data.type === 'geofence_alert') {
+                this.addLog('🚨 Geofence alert: ' + data.deviceName + ' ' + data.action + ' ' + data.geofenceName, 'danger');
+            } else if (data.type === 'initial_data') {
+                this.addLog('Initial data received from server', 'info');
+                data.devices.forEach((device) => {
+                    this.addDevice(device);
+                });
+            }
+        } catch (e) {
+            this.addLog('Invalid message received: ' + e.message, 'error');
+        }
+    };
+
+    socket.onerror = (error) => {
+        this.addLog('WebSocket error: ' + error.message, 'error');
+    };
+
+    socket.onclose = () => {
+        this.addLog('Disconnected from WebSocket server', 'warning');
+    };
+
+    this.websocketServer = socket;
+}
+
 
             setupEventListeners() {
                 // Server control buttons
@@ -718,14 +762,14 @@
                 const port = document.getElementById('serverPort').value;
                 
                 try {
-                    // Simulate WebSocket server (in real implementation, this would be a Node.js server)
-                    this.simulateWebSocketServer(port);
+                    // In real implementation, this would start a WebSocket server
                     this.isServerRunning = true;
                     this.startTime = new Date();
                     
                     this.updateServerStatus(true);
                     this.addLog('Server started successfully on port ' + port, 'success');
-                    this.showAlert('WebSocket server started on port ' + port, 'success');
+					  this.connectToWebSocketServer(port);
+                    this.showAlert('WebSocket server started on port ' + port + '. Waiting for device connections...', 'success');
                     
                 } catch (error) {
                     console.error('Failed to start server:', error);
@@ -743,6 +787,12 @@
                 this.isServerRunning = false;
                 this.startTime = null;
                 
+                // Clear location simulation interval
+                if (this.locationSimulationInterval) {
+                    clearInterval(this.locationSimulationInterval);
+                    this.locationSimulationInterval = null;
+                }
+                
                 // Clear all connected devices
                 Object.keys(this.connectedDevices).forEach(deviceId => {
                     this.removeDevice(deviceId);
@@ -751,77 +801,6 @@
                 this.updateServerStatus(false);
                 this.addLog('Server stopped', 'warning');
                 this.showAlert('WebSocket server stopped', 'warning');
-            }
-
-            simulateWebSocketServer(port) {
-                // This simulates a WebSocket server for demonstration
-                // In real implementation, you would use Node.js with ws library
-                
-                this.addLog(`Starting WebSocket server on port ${port}...`, 'info');
-                
-                // Simulate some demo devices connecting
-                setTimeout(() => {
-                    this.simulateDeviceConnection('Android-001', 'Samsung Galaxy S21', -6.2088, 106.8456);
-                }, 2000);
-                
-                setTimeout(() => {
-                    this.simulateDeviceConnection('Android-002', 'Xiaomi Mi 11', -6.1751, 106.8650);
-                }, 4000);
-                
-                setTimeout(() => {
-                    this.simulateDeviceConnection('Android-003', 'OnePlus 9', -6.2297, 106.8175);
-                }, 6000);
-
-                // Start simulated location updates
-                this.startLocationSimulation();
-            }
-
-            simulateDeviceConnection(deviceId, deviceName, lat, lng) {
-                const deviceInfo = {
-                    deviceId: deviceId,
-                    deviceName: deviceName,
-                    userAgent: 'Mozilla/5.0 (Linux; Android 11; SM-G991B)',
-                    connected: true,
-                    lastSeen: new Date().toISOString(),
-                    location: {
-                        latitude: lat,
-                        longitude: lng,
-                        accuracy: 10 + Math.random() * 20,
-                        timestamp: new Date().toISOString()
-                    }
-                };
-
-                this.addDevice(deviceInfo);
-                this.addLog(`Device connected: ${deviceName} (${deviceId})`, 'success');
-            }
-
-            startLocationSimulation() {
-                if (!this.locationSimulationInterval) {
-                    this.locationSimulationInterval = setInterval(() => {
-                        Object.keys(this.connectedDevices).forEach(deviceId => {
-                            const device = this.connectedDevices[deviceId];
-                            
-                            // Simulate small movements
-                            const currentLat = device.location.latitude;
-                            const currentLng = device.location.longitude;
-                            const newLat = currentLat + (Math.random() - 0.5) * 0.01;
-                            const newLng = currentLng + (Math.random() - 0.5) * 0.01;
-
-                            const locationUpdate = {
-                                type: 'location_update',
-                                deviceName: device.deviceName,
-                                latitude: newLat,
-                                longitude: newLng,
-                                accuracy: 5 + Math.random() * 25,
-                                speed: Math.random() * 50, // km/h
-                                heading: Math.random() * 360,
-                                timestamp: new Date().toISOString()
-                            };
-
-                            this.handleLocationUpdate(deviceId, locationUpdate);
-                        });
-                    }, parseInt(document.getElementById('updateInterval').value));
-                }
             }
 
             addDevice(deviceInfo) {
@@ -834,13 +813,16 @@
             removeDevice(deviceId) {
                 // Remove marker from map
                 if (this.deviceMarkers[deviceId]) {
-                    this.map.removeLayer(this.deviceMarkers[deviceId]);
+                    this.map.removeLayer(this.deviceMarkers[deviceId].marker);
+                    this.map.removeLayer(this.deviceMarkers[deviceId].circle);
                     delete this.deviceMarkers[deviceId];
                 }
 
                 // Remove path from map
                 if (this.devicePaths[deviceId]) {
-                    this.map.removeLayer(this.devicePaths[deviceId]);
+                    if (this.devicePaths[deviceId].polyline) {
+                        this.map.removeLayer(this.devicePaths[deviceId].polyline);
+                    }
                     delete this.devicePaths[deviceId];
                 }
 
@@ -850,6 +832,8 @@
                 this.updateDevicesList();
                 this.updateStats();
             }
+			
+
 
             createDeviceMarker(deviceInfo) {
                 const lat = deviceInfo.location.latitude;
@@ -1203,18 +1187,14 @@
                     updateInterval: document.getElementById('updateInterval').value,
                     mapType: document.getElementById('mapType').value
                 };
-                localStorage.setItem('monitoringSettings', JSON.stringify(settings));
+                // Note: localStorage is not available in Claude artifacts
+                console.log('Settings to save:', settings);
             }
 
             loadSettings() {
-                const saved = localStorage.getItem('monitoringSettings');
-                if (saved) {
-                    const settings = JSON.parse(saved);
-                    document.getElementById('serverPort').value = settings.serverPort || '8080';
-                    document.getElementById('updateInterval').value = settings.updateInterval || '5000';
-                    document.getElementById('mapType').value = settings.mapType || 'osm';
-                    this.updateMapLayer();
-                }
+                // Note: localStorage is not available in Claude artifacts
+                // In a real environment, you would load settings from localStorage
+                console.log('Settings loaded from defaults');
             }
         }
 
@@ -1223,7 +1203,10 @@
 
         function centerAllDevices() {
             const devices = Object.values(dashboard.connectedDevices);
-            if (devices.length === 0) return;
+            if (devices.length === 0) {
+                dashboard.showAlert('No devices to center on map', 'warning');
+                return;
+            }
 
             const bounds = L.latLngBounds();
             devices.forEach(device => {
@@ -1293,17 +1276,16 @@
         }
 
         function downloadMapScreenshot() {
-            // This would require additional libraries like html2canvas
-            dashboard.showAlert('Screenshot feature would require additional libraries', 'info');
+            dashboard.showAlert('Screenshot feature would require additional libraries like html2canvas', 'info');
         }
 
         // Initialize dashboard when page loads
         document.addEventListener('DOMContentLoaded', () => {
             dashboard = new LocationMonitoringDashboard();
             
-            // Add some demo alerts after initialization
+            // Show initialization message
             setTimeout(() => {
-                dashboard.showAlert('Dashboard initialized successfully', 'success');
+                dashboard.showAlert('Dashboard initialized successfully. Start the server to begin monitoring devices.', 'success');
             }, 1000);
         });
     </script>

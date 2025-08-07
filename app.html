@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Tracker - Mobile App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .mobile-container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            min-height: 100vh;
+            box-shadow: 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .header h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
+
+        .header .subtitle {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 20px;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            border: 2px solid #e9ecef;
+        }
+
+        .status-card.active {
+            border-color: #00b894;
+            background: linear-gradient(135deg, #e8f8f5 0%, #d1f2eb 100%);
+        }
+
+        .status-card.inactive {
+            border-color: #e17055;
+            background: linear-gradient(135deg, #fdf2f2 0%, #fadbd8 100%);
+        }
+
+        .status-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .status-text {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .status-subtitle {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .main-button {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 15px;
+            font-size: 1.1em;
+            font-weight: 700;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .main-button:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .main-button:hover:before {
+            left: 100%;
+        }
+
+        .btn-start {
+            background: linear-gradient(45deg, #00b894, #55a3ff);
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 184, 148, 0.3);
+        }
+
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 184, 148, 0.4);
+        }
+
+        .btn-stop {
+            background: linear-gradient(45deg, #e17055, #e84393);
+            color: white;
+            box-shadow: 0 4px 15px rgba(225, 112, 85, 0.3);
+        }
+
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(225, 112, 85, 0.4);
+        }
+
+        .location-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .location-info.show {
+            display: block;
+        }
+
+        .location-info h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            font-family: 'Courier New', monospace;
+            color: #333;
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .settings-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .settings-card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f2f6;
+        }
+
+        .setting-row:last-child {
+            border-bottom: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 25px;
+            background: #ddd;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-switch.active {
+            background: #00b894;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            background: white;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .toggle-switch.active::after {
+            left: 27px;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #666;
+            text-decoration: none;
+            padding: 5px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            min-width: 60px;
+        }
+
+        .nav-item.active {
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .nav-item .icon {
+            font-size: 1.5em;
+            margin-bottom: 3px;
+        }
+
+        .nav-item .label {
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+
+        .floating-action {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            z-index: 50;
+        }
+
+        .floating-action:hover {
+            transform: scale(1.1);
+        }
+
+        .connection-status {
+            padding: 10px;
+            text-align: center;
+            font-size: 0.9em;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .connection-status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .connection-status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="mobile-container">
+        <div class="header">
+            <h1>📍 Location Tracker</h1>
+            <div class="subtitle">Real-time GPS Monitoring</div>
+        </div>
+
+        <div class="content">
+            <div id="connectionStatus" class="connection-status disconnected">
+                🔴 Disconnected from server
+            </div>
+
+            <div id="statusCard" class="status-card inactive">
+                <span id="statusIcon" class="status-icon">📍</span>
+                <div id="statusText" class="status-text">Tracking Stopped</div>
+                <div id="statusSubtitle" class="status-subtitle">Tap start to begin monitoring</div>
+            </div>
+
+            <div class="form-group">
+                <label for="deviceName">Device Name</label>
+                <input type="text" id="deviceName" placeholder="Enter device name" value="Android Device">
+            </div>
+
+            <div class="form-group">
+                <label for="serverUrl">Server URL</label>
+                <input type="url" id="serverUrl" placeholder="https://your-server.com" value="ws://localhost:8080">
+            </div>
+
+            <button id="mainButton" class="main-button btn-start">
+                🚀 Start Tracking
+            </button>
+
+            <div id="locationInfo" class="location-info">
+                <h3>📊 Location Data</h3>
+                <div class="info-row">
+                    <span class="info-label">Latitude:</span>
+                    <span id="latitude" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Longitude:</span>
+                    <span id="longitude" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Accuracy:</span>
+                    <span id="accuracy" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Speed:</span>
+                    <span id="speed" class="info-value">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Last Update:</span>
+                    <span id="lastUpdate" class="info-value">-</span>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h3>⚙️ Settings</h3>
+                <div class="setting-row">
+                    <span>High Accuracy GPS</span>
+                    <div id="highAccuracyToggle" class="toggle-switch active"></div>
+                </div>
+                <div class="setting-row">
+                    <span>Background Tracking</span>
+                    <div id="backgroundToggle" class="toggle-switch"></div>
+                </div>
+                <div class="setting-row">
+                    <span>Auto Reconnect</span>
+                    <div id="autoReconnectToggle" class="toggle-switch active"></div>
+                </div>
+            </div>
+
+            <div style="height: 80px;"></div>
+        </div>
+
+        <button class="floating-action" id="shareLocation" title="Share Current Location">
+            📤
+        </button>
+
+        <div class="bottom-nav">
+            <a href="#" class="nav-item active">
+                <div class="icon">📍</div>
+                <div class="label">Tracker</div>
+            </a>
+            <a href="#" class="nav-item">
+                <div class="icon">📊</div>
+                <div class="label">Stats</div>
+            </a>
+            <a href="#" class="nav-item">
+                <div class="icon">⚙️</div>
+                <div class="label">Settings</div>
+            </a>
+            <a href="#" class="nav-item">
+                <div class="icon">ℹ️</div>
+                <div class="label">Info</div>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        class LocationTracker {
+            constructor() {
+                this.isTracking = false;
+                this.watchId = null;
+                this.websocket = null;
+                this.deviceName = 'Android Device';
+                this.reconnectAttempts = 0;
+                this.maxReconnectAttempts = 5;
+                this.locationHistory = [];
+                
+                this.settings = {
+                    highAccuracy: true,
+                    backgroundTracking: false,
+                    autoReconnect: true,
+                    updateInterval: 5000
+                };
+
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.loadSettings();
+                this.updateUI();
+                this.requestPermissions();
+            }
+
+            setupEventListeners() {
+                // Main tracking button
+                document.getElementById('mainButton').addEventListener('click', () => {
+                    this.toggleTracking();
+                });
+
+                // Settings toggles
+                document.getElementById('highAccuracyToggle').addEventListener('click', (e) => {
+                    this.toggleSetting(e.target, 'highAccuracy');
+                });
+
+                document.getElementById('backgroundToggle').addEventListener('click', (e) => {
+                    this.toggleSetting(e.target, 'backgroundTracking');
+                });
+
+                document.getElementById('autoReconnectToggle').addEventListener('click', (e) => {
+                    this.toggleSetting(e.target, 'autoReconnect');
+                });
+
+                // Device name input
+                document.getElementById('deviceName').addEventListener('change', (e) => {
+                    this.deviceName = e.target.value || 'Android Device';
+                    this.saveSettings();
+                });
+
+                // Share location button
+                document.getElementById('shareLocation').addEventListener('click', () => {
+                    this.shareCurrentLocation();
+                });
+
+                // Handle page visibility change for background tracking
+                document.addEventListener('visibilitychange', () => {
+                    if (this.settings.backgroundTracking && this.isTracking) {
+                        if (document.hidden) {
+                            console.log('App went to background, continuing tracking...');
+                        } else {
+                            console.log('App came to foreground, resuming tracking...');
+                        }
+                    }
+                });
+            }
+
+            async requestPermissions() {
+                try {
+                    // Request location permission
+                    if (navigator.geolocation) {
+                        const permission = await navigator.permissions.query({name: 'geolocation'});
+                        console.log('Location permission:', permission.state);
+                        
+                        if (permission.state === 'denied') {
+                            this.showNotification('Location permission is required for tracking', 'error');
+                        }
+                    }
+
+                    // Request notification permission for background updates
+                    if ('Notification' in window) {
+                        const permission = await Notification.requestPermission();
+                        console.log('Notification permission:', permission);
+                    }
+                } catch (error) {
+                    console.error('Permission request error:', error);
+                }
+            }
+
+            connectWebSocket() {
+                const serverUrl = document.getElementById('serverUrl').value || 'ws://localhost:8080';
+                
+                try {
+                    this.websocket = new WebSocket(serverUrl);
+                    
+                    this.websocket.onopen = () => {
+                        console.log('WebSocket connected');
+                        this.updateConnectionStatus(true);
+                        this.reconnectAttempts = 0;
+                        
+                        // Send initial device info
+                        this.sendMessage({
+                            type: 'device_info',
+                            deviceName: this.deviceName,
+                            timestamp: new Date().toISOString(),
+                            userAgent: navigator.userAgent
+                        });
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        console.log('Received:', data);
+                        this.handleServerMessage(data);
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('WebSocket disconnected');
+                        this.updateConnectionStatus(false);
+                        
+                        if (this.settings.autoReconnect && this.isTracking && this.reconnectAttempts < this.maxReconnectAttempts) {
+                            this.reconnectAttempts++;
+                            console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+                            setTimeout(() => this.connectWebSocket(), 3000 * this.reconnectAttempts);
+                        }
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.showNotification('Connection error occurred', 'error');
+                    };
+                    
+                } catch (error) {
+                    console.error('WebSocket connection error:', error);
+                    this.showNotification('Failed to connect to server', 'error');
+                }
+            }
+
+            sendMessage(data) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify(data));
+                } else {
+                    console.warn('WebSocket not connected, message not sent:', data);
+                }
+            }
+
+            handleServerMessage(data) {
+                switch (data.type) {
+                    case 'ping':
+                        this.sendMessage({ type: 'pong', timestamp: new Date().toISOString() });
+                        break;
+                    case 'config':
+                        // Handle server configuration updates
+                        console.log('Server config:', data);
+                        break;
+                    default:
+                        console.log('Unknown message type:', data.type);
+                }
+            }
+
+            startTracking() {
+                if (!navigator.geolocation) {
+                    this.showNotification('Geolocation not supported', 'error');
+                    return;
+                }
+
+                this.connectWebSocket();
+
+                const options = {
+                    enableHighAccuracy: this.settings.highAccuracy,
+                    timeout: 15000,
+                    maximumAge: 0
+                };
+
+                this.watchId = navigator.geolocation.watchPosition(
+                    (position) => this.handleLocationUpdate(position),
+                    (error) => this.handleLocationError(error),
+                    options
+                );
+
+                this.isTracking = true;
+                this.updateUI();
+                this.showNotification('Location tracking started', 'success');
+
+                // Wake lock for background tracking (if supported)
+                if (this.settings.backgroundTracking && 'wakeLock' in navigator) {
+                    navigator.wakeLock.request('screen').catch(console.error);
+                }
+            }
+
+            stopTracking() {
+                if (this.watchId) {
+                    navigator.geolocation.clearWatch(this.watchId);
+                    this.watchId = null;
+                }
+
+                if (this.websocket) {
+                    this.sendMessage({ type: 'stop_tracking', timestamp: new Date().toISOString() });
+                    this.websocket.close();
+                }
+
+                this.isTracking = false;
+                this.updateUI();
+                this.showNotification('Location tracking stopped', 'info');
+            }
+
+            toggleTracking() {
+                if (this.isTracking) {
+                    this.stopTracking();
+                } else {
+                    this.startTracking();
+                }
+            }
+
+            handleLocationUpdate(position) {
+                const locationData = {
+                    type: 'location_update',
+                    deviceName: this.deviceName,
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy,
+                    altitude: position.coords.altitude,
+                    altitudeAccuracy: position.coords.altitudeAccuracy,
+                    heading: position.coords.heading,
+                    speed: position.coords.speed,
+                    timestamp: new Date().toISOString()
+                };
+
+                // Update UI
+                this.updateLocationDisplay(locationData);
+
+                // Add to history
+                this.locationHistory.push(locationData);
+                if (this.locationHistory.length > 100) {
+                    this.locationHistory.shift(); // Keep only last 100 locations
+                }
+
+                // Send to server
+                this.sendMessage(locationData);
+
+                // Save to local storage as backup
+                localStorage.setItem('lastLocation', JSON.stringify(locationData));
+
+                console.log('Location update:', locationData);
+            }
+
+            handleLocationError(error) {
+                let message = 'Unknown location error';
+                
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        message = 'Location permission denied';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        message = 'Location unavailable';
+                        break;
+                    case error.TIMEOUT:
+                        message = 'Location request timeout';
+                        break;
+                }
+
+                console.error('Location error:', error);
+                this.showNotification(message, 'error');
+
+                // Send error to server
+                this.sendMessage({
+                    type: 'location_error',
+                    deviceName: this.deviceName,
+                    error: message,
+                    code: error.code,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
+            updateLocationDisplay(data) {
+                document.getElementById('latitude').textContent = data.latitude.toFixed(6);
+                document.getElementById('longitude').textContent = data.longitude.toFixed(6);
+                document.getElementById('accuracy').textContent = `${Math.round(data.accuracy)}m`;
+                document.getElementById('speed').textContent = data.speed ? `${Math.round(data.speed * 3.6)} km/h` : '0 km/h';
+                document.getElementById('lastUpdate').textContent = new Date(data.timestamp).toLocaleTimeString();
+            }
+
+            shareCurrentLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lng = position.coords.longitude;
+                            const url = `https://maps.google.com/?q=${lat},${lng}`;
+                            
+                            if (navigator.share) {
+                                navigator.share({
+                                    title: 'My Location',
+                                    text: `I'm here: ${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                                    url: url
+                                });
+                            } else {
+                                navigator.clipboard.writeText(url).then(() => {
+                                    this.showNotification('Location link copied to clipboard', 'success');
+                                });
+                            }
+                        },
+                        (error) => {
+                            this.showNotification('Failed to get current location', 'error');
+                        }
+                    );
+                }
+            }
+
+            toggleSetting(element, setting) {
+                this.settings[setting] = !this.settings[setting];
+                element.classList.toggle('active', this.settings[setting]);
+                this.saveSettings();
+                
+                // Apply setting changes
+                if (setting === 'highAccuracy' && this.isTracking) {
+                    this.stopTracking();
+                    setTimeout(() => this.startTracking(), 1000);
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusElement.textContent = '🟢 Connected to server';
+                    statusElement.className = 'connection-status connected';
+                } else {
+                    statusElement.textContent = '🔴 Disconnected from server';
+                    statusElement.className = 'connection-status disconnected';
+                }
+            }
+
+            updateUI() {
+                const statusCard = document.getElementById('statusCard');
+                const statusIcon = document.getElementById('statusIcon');
+                const statusText = document.getElementById('statusText');
+                const statusSubtitle = document.getElementById('statusSubtitle');
+                const mainButton = document.getElementById('mainButton');
+                const locationInfo = document.getElementById('locationInfo');
+
+                if (this.isTracking) {
+                    statusCard.className = 'status-card active pulse';
+                    statusIcon.textContent = '📡';
+                    statusText.textContent = 'Tracking Active';
+                    statusSubtitle.textContent = 'Sending location data to server';
+                    mainButton.textContent = '⏹️ Stop Tracking';
+                    mainButton.className = 'main-button btn-stop';
+                    locationInfo.classList.add('show');
+                } else {
+                    statusCard.className = 'status-card inactive';
+                    statusIcon.textContent = '📍';
+                    statusText.textContent = 'Tracking Stopped';
+                    statusSubtitle.textContent = 'Tap start to begin monitoring';
+                    mainButton.textContent = '🚀 Start Tracking';
+                    mainButton.className = 'main-button btn-start';
+                    locationInfo.classList.remove('show');
+                }
+            }
+
+            showNotification(message, type = 'info') {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: ${type === 'error' ? '#e74c3c' : type === 'success' ? '#27ae60' : '#3498db'};
+                    color: white;
+                    padding: 15px 20px;
+                    border-radius: 10px;
+                    z-index: 1000;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+                    max-width: 350px;
+                    text-align: center;
+                    font-weight: 600;
+                `;
+                notification.textContent = message;
+                
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.remove();
+                }, 3000);
+
+                // Also show browser notification if permission granted
+                if (Notification.permission === 'granted') {
+                    new Notification('Location Tracker', {
+                        body: message,
+                        icon: '/favicon.ico'
+                    });
+                }
+            }
+
+            saveSettings() {
+                localStorage.setItem('trackerSettings', JSON.stringify({
+                    ...this.settings,
+                    deviceName: this.deviceName
+                }));
+            }
+
+            loadSettings() {
+                const saved = localStorage.getItem('trackerSettings');
+                if (saved) {
+                    const settings = JSON.parse(saved);
+                    this.settings = { ...this.settings, ...settings };
+                    this.deviceName = settings.deviceName || this.deviceName;
+                    
+                    // Update UI
+                    document.getElementById('deviceName').value = this.deviceName;
+                    document.getElementById('highAccuracyToggle').classList.toggle('active', this.settings.highAccuracy);
+                    document.getElementById('backgroundToggle').classList.toggle('active', this.settings.backgroundTracking);
+                    document.getElementById('autoReconnectToggle').classList.toggle('active', this.settings.autoReconnect);
+                }
+            }
+        }
+
+        // Initialize the app when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.locationTracker = new LocationTracker();
+        });
+
+        // Handle PWA installation
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        // Service Worker registration for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(console.error);
+        }
+    </script>
+</body>
+</html>
